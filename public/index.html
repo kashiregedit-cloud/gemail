@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gmail Creator Dashboard</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .container { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 400px; text-align: center; }
+        h1 { color: #333; margin-bottom: 1.5rem; }
+        .status { margin: 1.5rem 0; padding: 1rem; border-radius: 8px; background: #e8f0fe; color: #1967d2; font-weight: bold; }
+        button { background-color: #4285f4; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 16px; transition: background 0.3s; width: 100%; }
+        button:hover { background-color: #357abd; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        .logs { margin-top: 1rem; text-align: left; max-height: 150px; overflow-y: auto; font-size: 12px; color: #666; border: 1px solid #eee; padding: 0.5rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Gmail Creator</h1>
+        <div id="status" class="status">Ready to Start</div>
+        <button id="startBtn">Create New Account</button>
+        <div class="logs" id="logs"></div>
+    </div>
+
+    <script>
+        const startBtn = document.getElementById('startBtn');
+        const statusDiv = document.getElementById('status');
+        const logsDiv = document.getElementById('logs');
+
+        function addLog(msg) {
+            const p = document.createElement('p');
+            p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logsDiv.prepend(p);
+        }
+
+        startBtn.addEventListener('click', async () => {
+            startBtn.disabled = true;
+            statusDiv.textContent = 'Running Automation...';
+            addLog('Starting Playwright script...');
+
+            try {
+                const response = await fetch('/api/start-signup', { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.success) {
+                    statusDiv.textContent = 'Browser Opened!';
+                    addLog('Browser opened successfully. Check the new window.');
+                } else {
+                    statusDiv.textContent = 'Error occurred';
+                    addLog('Error: ' + data.message);
+                }
+            } catch (err) {
+                statusDiv.textContent = 'Connection Error';
+                addLog('Error connecting to server.');
+            } finally {
+                startBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
