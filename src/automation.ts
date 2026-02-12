@@ -1,6 +1,6 @@
 import { chromium, Browser, BrowserContext, Page } from 'playwright';
 
-export async function runResearch(apiKey?: string): Promise<void> {
+export async function runResearch(apiKey?: string, country: string = 'bangladesh', useOwnServer: boolean = false): Promise<void> {
     console.log('Launching browser with Extreme Stealth Mode...');
     
     // 1. Precise Mobile Device Simulation based on User Categories
@@ -283,17 +283,27 @@ export async function runResearch(apiKey?: string): Promise<void> {
         await page.waitForTimeout(1000 + Math.random() * 1000);
     }
 
-    // VIRTUAL NUMBER INTEGRATION (5sim.net)
-    async function get5SimNumber(): Promise<{ id: string, phone: string } | null> {
+    // VIRTUAL NUMBER INTEGRATION (5sim.net or Own Server)
+    async function getNumber(): Promise<{ id: string, phone: string } | null> {
+        if (useOwnServer) {
+            try {
+                console.log('Requesting number from OWN SIM Server (localhost:4000)...');
+                const response = await fetch('http://localhost:4000/api/get-number');
+                return await response.json();
+            } catch (e) {
+                console.error('Own SIM Server not running!');
+                return null;
+            }
+        }
+
         if (!apiKey) {
             console.error('5sim API Key not provided in dashboard!');
             return null;
         }
 
         try {
-            console.log('Requesting number from 5sim.net...');
-            // Country: bangladesh (id: 11), Operator: any, Product: google
-            const response = await fetch('https://5sim.net/v1/user/buy/activation/bangladesh/any/google', {
+            console.log(`Requesting number from 5sim.net for country: ${country}...`);
+            const response = await fetch(`https://5sim.net/v1/user/buy/activation/${country}/any/google`, {
                 headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' }
             });
             const data = await response.json();
@@ -307,17 +317,23 @@ export async function runResearch(apiKey?: string): Promise<void> {
         return null;
     }
 
-    async function wait5SimSMS(orderId: string): Promise<string | null> {
+    async function waitSMS(orderId: string): Promise<string | null> {
         console.log('Waiting for SMS code (checking every 5 seconds)...');
         for (let i = 0; i < 24; i++) { // Wait up to 2 minutes
             await page.waitForTimeout(5000);
             try {
-                const response = await fetch(`https://5sim.net/v1/user/check/${orderId}`, {
-                    headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' }
-                });
+                let response;
+                if (useOwnServer) {
+                    response = await fetch(`http://localhost:4000/api/check-sms/${orderId}`);
+                } else {
+                    response = await fetch(`https://5sim.net/v1/user/check/${orderId}`, {
+                        headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' }
+                    });
+                }
                 const data = await response.json();
-                if (data.sms && data.sms.length > 0) {
-                    const code = data.sms[0].code;
+                const smsList = useOwnServer ? data.sms : data.sms;
+                if (smsList && smsList.length > 0) {
+                    const code = smsList[0].code;
                     console.log(`SMS Received! Code: ${code}`);
                     return code;
                 }
@@ -334,8 +350,8 @@ export async function runResearch(apiKey?: string): Promise<void> {
         if (content.includes('Verify your phone number') || content.includes('Verify your device')) {
             console.log('--- PHONE VERIFICATION TRIGGERED ---');
             
-            if (apiKey) {
-                const simData = await get5SimNumber();
+            if (apiKey || useOwnServer) {
+                const simData = await getNumber();
                 if (simData) {
                     console.log(`Successfully got number: ${simData.phone}`);
                     // 1. Type the number
@@ -345,7 +361,7 @@ export async function runResearch(apiKey?: string): Promise<void> {
                         await page.keyboard.press('Enter');
                         
                         // 2. Wait for SMS
-                        const code = await wait5SimSMS(simData.id);
+                        const code = await waitSMS(simData.id);
                         if (code) {
                             const codeInput = page.locator('input[aria-label="Enter code"], #code').first();
                             if (await codeInput.isVisible()) {

@@ -20,11 +20,11 @@ app.get('/', (req: Request, res: Response) => {
 
 // API to trigger signup
 app.post('/api/start-signup', async (req: Request, res: Response) => {
-    const { apiKey } = req.body;
+    const { apiKey, country, useOwnServer } = req.body;
     console.log('Starting signup process from dashboard...');
     try {
         // We run it asynchronously so the dashboard doesn't hang
-        runResearch(apiKey).catch((err: Error) => console.error('Automation Error:', err));
+        runResearch(apiKey, country, useOwnServer).catch((err: Error) => console.error('Automation Error:', err));
         
         res.json({ success: true, message: 'Automation started' });
     } catch (error) {
