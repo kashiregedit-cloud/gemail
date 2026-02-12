@@ -96,12 +96,52 @@ export async function runResearch(): Promise<void> {
         const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
         CanvasRenderingContext2D.prototype.getImageData = function(x, y, w, h) {
             const imageData = originalGetImageData.apply(this, [x, y, w, h]);
-            const noise = (Math.random() - 0.5) * 2; // Subtle noise
+            const noise = (Math.random() - 0.5) * 2;
             for (let i = 0; i < imageData.data.length; i += 4) {
                 imageData.data[i] = imageData.data[i] + noise;
             }
             return imageData;
         };
+
+        // 0.1 WebRTC Leak Protection (Google sees real IP via WebRTC)
+        // @ts-ignore
+        navigator.mediaDevices.getUserMedia = () => Promise.reject(new Error('Permission denied'));
+        // @ts-ignore
+        window.RTCPeerConnection = function() {
+            return {
+                createOffer: () => Promise.reject(new Error('Disabled')),
+                setLocalDescription: () => Promise.resolve(),
+                addIceCandidate: () => Promise.resolve(),
+                onicecandidate: null,
+                close: () => {}
+            };
+        };
+
+        // 0.2 Audio Fingerprinting Defense
+        const originalGetChannelData = AudioBuffer.prototype.getChannelData;
+        AudioBuffer.prototype.getChannelData = function(channel) {
+            const data = originalGetChannelData.apply(this, [channel]);
+            for (let i = 0; i < data.length; i += 100) {
+                data[i] = data[i] + (Math.random() * 0.0000001);
+            }
+            return data;
+        };
+
+        // 0.3 Sensor Simulation (Mobile devices move)
+        // @ts-ignore
+        window.DeviceMotionEvent = function() {};
+        // @ts-ignore
+        window.DeviceOrientationEvent = function() {};
+        
+        const simulateSensors = () => {
+            const event = new DeviceOrientationEvent('deviceorientation', {
+                alpha: Math.random() * 360,
+                beta: Math.random() * 20 - 10,
+                gamma: Math.random() * 20 - 10
+            });
+            window.dispatchEvent(event);
+        };
+        setInterval(simulateSensors, 2000);
 
         // 1. Complete Automation Detection bypass
         // @ts-ignore
@@ -181,6 +221,15 @@ export async function runResearch(): Promise<void> {
         // 8. Navigator Plugins mask
         // @ts-ignore
         Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+
+        // 9. Font Fingerprinting Mask (Google checks available fonts)
+        const originalQuery = (document as any).fonts?.query;
+        if (originalQuery) {
+            (document as any).fonts.query = (font: string) => {
+                if (['Arial', 'Roboto', 'sans-serif'].includes(font)) return true;
+                return Math.random() > 0.5;
+            };
+        }
     }, { selectedDevice, selectedBuild });
 
     // Higher-Level Interaction Helper: Real Human Behavior
