@@ -22,21 +22,12 @@
             <label for="apiKey" style="font-size: 14px; color: #666; display: block; margin-bottom: 5px;">5sim.net API Key (Optional):</label>
             <input type="password" id="apiKey" placeholder="Enter your 5sim API key" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; margin-bottom: 10px;">
             
-            <label for="country" style="font-size: 14px; color: #666; display: block; margin-bottom: 5px;">Select Country (Cheapest first):</label>
-            <select id="country" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; margin-bottom: 10px;">
-                <option value="bangladesh">Bangladesh (Standard)</option>
-                <option value="india">India</option>
-                <option value="vietnam">Vietnam (Often Cheaper)</option>
-                <option value="indonesia">Indonesia</option>
-                <option value="russia">Russia (Cheapest but risky)</option>
-                <option value="cambodia">Cambodia</option>
-                <option value="philippines">Philippines</option>
+            <label for="simSource" style="font-size: 14px; color: #666; display: block; margin-bottom: 5px;">SIM Source:</label>
+            <select id="simSource" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; margin-bottom: 10px;">
+                <option value="5sim">5sim.net (Paid - High Success)</option>
+                <option value="own">My Own Android Relay (Free - 10-15 accounts/SIM)</option>
+                <option value="public">Free Public Numbers (Zero Cost - Unlimited but Low Success)</option>
             </select>
-
-            <div style="margin-top: 10px; display: flex; align-items: center;">
-                <input type="checkbox" id="useOwnServer" style="margin-right: 10px;">
-                <label for="useOwnServer" style="font-size: 14px; color: #666;">Use My Own SIM Server (Localhost:4000)</label>
-            </div>
         </div>
         <div id="status" class="status">Ready to Start</div>
         <button id="startBtn">Create New Account</button>
@@ -56,8 +47,7 @@
 
         startBtn.addEventListener('click', async () => {
             const apiKey = document.getElementById('apiKey').value;
-            const country = document.getElementById('country').value;
-            const useOwnServer = document.getElementById('useOwnServer').checked;
+            const simSource = document.getElementById('simSource').value;
             startBtn.disabled = true;
             statusDiv.textContent = 'Running Automation...';
             addLog('Starting Playwright script...');
@@ -66,7 +56,7 @@
                 const response = await fetch('/api/start-signup', { 
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ apiKey, country, useOwnServer })
+                    body: JSON.stringify({ apiKey, simSource })
                 });
                 const data = await response.json();
                 

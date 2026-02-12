@@ -47,6 +47,60 @@ simApp.post('/api/simulate-receive', (req: Request, res: Response) => {
     }
 });
 
-simApp.listen(SIM_PORT, () => {
-    console.log(`OWN SIM SERVER Emulator running at http://localhost:${SIM_PORT}`);
+// API to receive SMS from an Android Phone (Free Relay)
+// User can use apps like "SMS to URL" or Tasker to hit this endpoint
+simApp.post('/api/incoming-sms', (req: Request, res: Response) => {
+    const { from, message } = req.body;
+    console.log(`Incoming SMS from ${from}: ${message}`);
+    
+    // Extract 6-digit code for Google
+    const codeMatch = message.match(/\b\d{6}\b/);
+    if (codeMatch) {
+        const code = codeMatch[0];
+        // Find the active order and update it
+        for (const orderId in activeOrders) {
+            activeOrders[orderId].sms.push({ code, text: message });
+        }
+        res.json({ success: true, message: 'Code captured' });
+    } else {
+        res.status(400).json({ success: false, message: 'No code found in message' });
+    }
+});
+
+// --- PUBLIC FREE SMS SERVICE ---
+// This part will scrape free numbers from public sites
+let publicNumbers: any[] = [];
+
+async function refreshPublicNumbers() {
+    console.log('[SIM SERVER] Refreshing Public Free Numbers...');
+    try {
+        // Example: Scrape from a free site (Simulated for now, can be replaced with real axios/cheerio logic)
+        // In real use, you'd fetch 'https://receive-sms-free.cc/' or similar
+        publicNumbers = [
+            { id: 'pub1', phone: '+447451234567', country: 'UK' },
+            { id: 'pub2', phone: '+12025550123', country: 'USA' },
+            { id: 'pub3', phone: '+33644667788', country: 'France' }
+        ];
+    } catch (e) {
+        console.error('Failed to fetch public numbers');
+    }
+}
+
+simApp.get('/api/get-free-number', async (req: Request, res: Response) => {
+    if (publicNumbers.length === 0) await refreshPublicNumbers();
+    const num = publicNumbers[Math.floor(Math.random() * publicNumbers.length)];
+    res.json(num);
+});
+
+simApp.get('/api/check-public-sms', async (req: Request, res: Response) => {
+    const { phone } = req.query;
+    console.log(`[SIM SERVER] Checking public SMS for ${phone}...`);
+    // Here you would scrape the specific number's page on the free site
+    // For now, we simulate a check
+    res.json({ sms: [] }); 
+});
+
+simApp.listen(SIM_PORT, '0.0.0.0', () => {
+    console.log(`OWN SIM SERVER (Zero-Cost Mode) running at http://localhost:${SIM_PORT}`);
+    console.log(`To receive SMS for free, point your Android Relay app to: http://YOUR_PC_IP:${SIM_PORT}/api/incoming-sms`);
 });

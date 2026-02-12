@@ -1,7 +1,7 @@
 import { chromium, Browser, BrowserContext, Page } from 'playwright';
 
-export async function runResearch(apiKey?: string, country: string = 'bangladesh', useOwnServer: boolean = false): Promise<void> {
-    console.log('Launching browser with Extreme Stealth Mode...');
+export async function runResearch(apiKey?: string, simSource: string = '5sim'): Promise<void> {
+    console.log(`Launching browser with SIM Source: ${simSource}...`);
     
     // 1. Precise Mobile Device Simulation based on User Categories
     const devices = [
@@ -283,9 +283,9 @@ export async function runResearch(apiKey?: string, country: string = 'bangladesh
         await page.waitForTimeout(1000 + Math.random() * 1000);
     }
 
-    // VIRTUAL NUMBER INTEGRATION (5sim.net or Own Server)
+    // VIRTUAL NUMBER INTEGRATION
     async function getNumber(): Promise<{ id: string, phone: string } | null> {
-        if (useOwnServer) {
+        if (simSource === 'own') {
             try {
                 console.log('Requesting number from OWN SIM Server (localhost:4000)...');
                 const response = await fetch('http://localhost:4000/api/get-number');
@@ -296,51 +296,58 @@ export async function runResearch(apiKey?: string, country: string = 'bangladesh
             }
         }
 
-        if (!apiKey) {
-            console.error('5sim API Key not provided in dashboard!');
-            return null;
+        if (simSource === 'public') {
+            try {
+                console.log('Requesting Free Public Number from simServer...');
+                const response = await fetch('http://localhost:4000/api/get-free-number');
+                const data = await response.json();
+                return data;
+            } catch (e) {
+                console.error('Failed to get public number.');
+                return null;
+            }
         }
 
-        try {
-            console.log(`Requesting number from 5sim.net for country: ${country}...`);
-            const response = await fetch(`https://5sim.net/v1/user/buy/activation/${country}/any/google`, {
-                headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' }
-            });
-            const data = await response.json();
-            if (data && data.phone) {
-                return { id: data.id, phone: data.phone };
+        if (simSource === '5sim') {
+            if (!apiKey) {
+                console.error('5sim API Key missing!');
+                return null;
             }
-            console.error('5sim Error:', data.error || 'Unknown error');
-        } catch (error) {
-            console.error('5sim API Fetch failed:', (error as Error).message);
+            try {
+                const response = await fetch(`https://5sim.net/v1/user/buy/activation/bangladesh/any/google`, {
+                    headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' }
+                });
+                const data = await response.json();
+                return data && data.phone ? { id: data.id, phone: data.phone } : null;
+            } catch (e) {
+                console.error('5sim API Error');
+            }
         }
         return null;
     }
 
-    async function waitSMS(orderId: string): Promise<string | null> {
-        console.log('Waiting for SMS code (checking every 5 seconds)...');
-        for (let i = 0; i < 24; i++) { // Wait up to 2 minutes
+    async function waitSMS(orderId: string, phone?: string): Promise<string | null> {
+        console.log('Waiting for SMS code...');
+        for (let i = 0; i < 24; i++) {
             await page.waitForTimeout(5000);
             try {
                 let response;
-                if (useOwnServer) {
+                if (simSource === 'own') {
                     response = await fetch(`http://localhost:4000/api/check-sms/${orderId}`);
+                } else if (simSource === 'public') {
+                    // For public numbers, we might need to check the web page
+                    response = await fetch(`http://localhost:4000/api/check-public-sms?phone=${phone}`);
                 } else {
                     response = await fetch(`https://5sim.net/v1/user/check/${orderId}`, {
                         headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' }
                     });
                 }
                 const data = await response.json();
-                const smsList = useOwnServer ? data.sms : data.sms;
-                if (smsList && smsList.length > 0) {
-                    const code = smsList[0].code;
-                    console.log(`SMS Received! Code: ${code}`);
-                    return code;
-                }
+                const smsList = data.sms || [];
+                if (smsList.length > 0) return smsList[0].code;
                 process.stdout.write('.');
             } catch (e) {}
         }
-        console.log('\nSMS Timeout.');
         return null;
     }
 
@@ -350,7 +357,7 @@ export async function runResearch(apiKey?: string, country: string = 'bangladesh
         if (content.includes('Verify your phone number') || content.includes('Verify your device')) {
             console.log('--- PHONE VERIFICATION TRIGGERED ---');
             
-            if (apiKey || useOwnServer) {
+            if (apiKey || simSource !== '5sim') {
                 const simData = await getNumber();
                 if (simData) {
                     console.log(`Successfully got number: ${simData.phone}`);
@@ -361,7 +368,7 @@ export async function runResearch(apiKey?: string, country: string = 'bangladesh
                         await page.keyboard.press('Enter');
                         
                         // 2. Wait for SMS
-                        const code = await waitSMS(simData.id);
+                        const code = await waitSMS(simData.id, simData.phone);
                         if (code) {
                             const codeInput = page.locator('input[aria-label="Enter code"], #code').first();
                             if (await codeInput.isVisible()) {
