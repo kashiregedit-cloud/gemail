@@ -1,6 +1,6 @@
 import { chromium, Browser, BrowserContext, Page } from 'playwright';
 
-export async function runResearch(): Promise<void> {
+export async function runResearch(apiKey?: string): Promise<void> {
     console.log('Launching browser with Extreme Stealth Mode...');
     
     // 1. Precise Mobile Device Simulation based on User Categories
@@ -49,8 +49,13 @@ export async function runResearch(): Promise<void> {
         args: [
             '--disable-blink-features=AutomationControlled',
             '--disable-infobars',
-            `--window-size=${selectedDevice.w},${selectedDevice.h + 100}`,
-            '--user-agent=' + selectedDevice.ua,
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-gpu',
+            '--disable-dev-shm-usage',
+            '--disable-software-rasterizer',
+            '--mute-audio',
+            '--window-position=0,0',
         ]
     };
 
@@ -85,9 +90,21 @@ export async function runResearch(): Promise<void> {
     await page.addInitScript(({ selectedDevice, selectedBuild }) => {
         // 0. Canvas Fingerprinting Defense (Subtle noise to avoid detection without breaking render)
         const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
-        HTMLCanvasElement.prototype.toDataURL = function(type) {
-            const res = originalToDataURL.apply(this, arguments as any);
-            return res; // Just return original for now to avoid black screen
+        HTMLCanvasElement.prototype.toDataURL = function() {
+            if (arguments[0] === 'image/png') {
+                // Subtle noise for PNG only
+            }
+            return originalToDataURL.apply(this, arguments as any);
+        };
+
+        const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+        CanvasRenderingContext2D.prototype.getImageData = function(x, y, w, h) {
+            const imageData = originalGetImageData.apply(this, [x, y, w, h]);
+            // Add extremely subtle noise to the first pixel only as a test
+            if (imageData.data.length > 0) {
+                imageData.data[0] = imageData.data[0] ^ 1;
+            }
+            return imageData;
         };
 
         // 0.1 WebRTC Leak Protection (Google sees real IP via WebRTC)
@@ -151,6 +168,15 @@ export async function runResearch(): Promise<void> {
         Object.defineProperty(navigator, 'deviceMemory', { get: () => ram });
         Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en-GB', 'en'] });
         Object.defineProperty(navigator, 'platform', { get: () => selectedDevice.platform });
+
+        // 2.1 Navigator Permissions Query Mask
+        const originalQuery = navigator.permissions.query;
+        // @ts-ignore
+        navigator.permissions.query = (parameters) => (
+            parameters.name === 'notifications' ?
+                Promise.resolve({ state: Notification.permission, onchange: null } as any) :
+                originalQuery(parameters)
+        );
         
         // 3. Advanced Screen and Window signals (True Mobile behavior)
         // @ts-ignore
@@ -201,17 +227,23 @@ export async function runResearch(): Promise<void> {
             getBuildId: () => selectedBuild
         };
 
-        // 7. Touch Event Simulation (Bypass mouse detection)
-        // @ts-ignore
-        window.ontouchstart = null;
+    // 7. Touch Event Simulation (Bypass mouse detection)
+    // @ts-ignore
+    window.ontouchstart = null;
+    
+    // 7.1 Screen/Window Signal Alignment
+    Object.defineProperty(window, 'innerHeight', { get: () => selectedDevice.h });
+    Object.defineProperty(window, 'innerWidth', { get: () => selectedDevice.w });
+    Object.defineProperty(screen, 'height', { get: () => selectedDevice.h });
+    Object.defineProperty(screen, 'width', { get: () => selectedDevice.w });
         
         // 8. Navigator Plugins mask
         // @ts-ignore
         Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
 
         // 9. Font Fingerprinting Mask (Google checks available fonts)
-        const originalQuery = (document as any).fonts?.query;
-        if (originalQuery) {
+        const originalFontQuery = (document as any).fonts?.query;
+        if (originalFontQuery) {
             (document as any).fonts.query = (font: string) => {
                 if (['Arial', 'Roboto', 'sans-serif'].includes(font)) return true;
                 return Math.random() > 0.5;
@@ -222,7 +254,6 @@ export async function runResearch(): Promise<void> {
     // Higher-Level Interaction Helper: Real Human Behavior
     async function ultraHumanInteraction() {
         const size = page.viewportSize() || { width: 390, height: 844 };
-        console.log('Simulating complex human behavior...');
         
         // 1. Randomized jittery mouse movements
         for (let i = 0; i < 3; i++) {
@@ -252,13 +283,83 @@ export async function runResearch(): Promise<void> {
         await page.waitForTimeout(1000 + Math.random() * 1000);
     }
 
+    // VIRTUAL NUMBER INTEGRATION (5sim.net)
+    async function get5SimNumber(): Promise<{ id: string, phone: string } | null> {
+        if (!apiKey) {
+            console.error('5sim API Key not provided in dashboard!');
+            return null;
+        }
+
+        try {
+            console.log('Requesting number from 5sim.net...');
+            // Country: bangladesh (id: 11), Operator: any, Product: google
+            const response = await fetch('https://5sim.net/v1/user/buy/activation/bangladesh/any/google', {
+                headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' }
+            });
+            const data = await response.json();
+            if (data && data.phone) {
+                return { id: data.id, phone: data.phone };
+            }
+            console.error('5sim Error:', data.error || 'Unknown error');
+        } catch (error) {
+            console.error('5sim API Fetch failed:', (error as Error).message);
+        }
+        return null;
+    }
+
+    async function wait5SimSMS(orderId: string): Promise<string | null> {
+        console.log('Waiting for SMS code (checking every 5 seconds)...');
+        for (let i = 0; i < 24; i++) { // Wait up to 2 minutes
+            await page.waitForTimeout(5000);
+            try {
+                const response = await fetch(`https://5sim.net/v1/user/check/${orderId}`, {
+                    headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/json' }
+                });
+                const data = await response.json();
+                if (data.sms && data.sms.length > 0) {
+                    const code = data.sms[0].code;
+                    console.log(`SMS Received! Code: ${code}`);
+                    return code;
+                }
+                process.stdout.write('.');
+            } catch (e) {}
+        }
+        console.log('\nSMS Timeout.');
+        return null;
+    }
+
     // CAPTCHA and Error Detection
     async function checkSecurityBlocks() {
         const content = await page.content();
-        if (content.includes('unusual traffic') || content.includes('captcha') || content.includes('g-recaptcha')) {
-            console.error('CRITICAL: Google detected unusual traffic (CAPTCHA).');
-            console.log('--- ACTION REQUIRED: Please change your IP using Airplane Mode! ---');
-            return true;
+        if (content.includes('Verify your phone number') || content.includes('Verify your device')) {
+            console.log('--- PHONE VERIFICATION TRIGGERED ---');
+            
+            if (apiKey) {
+                const simData = await get5SimNumber();
+                if (simData) {
+                    console.log(`Successfully got number: ${simData.phone}`);
+                    // 1. Type the number
+                    const phoneInput = page.locator('input[type="tel"], #phoneNumberId').first();
+                    if (await phoneInput.isVisible()) {
+                        await phoneInput.fill(simData.phone);
+                        await page.keyboard.press('Enter');
+                        
+                        // 2. Wait for SMS
+                        const code = await wait5SimSMS(simData.id);
+                        if (code) {
+                            const codeInput = page.locator('input[aria-label="Enter code"], #code').first();
+                            if (await codeInput.isVisible()) {
+                                await codeInput.fill(code);
+                                await page.keyboard.press('Enter');
+                                return false; // Continue signup
+                            }
+                        }
+                    }
+                }
+            } else {
+                console.log('No 5sim API Key. Please enter it in the dashboard.');
+            }
+            return false;
         }
         if (content.includes('could not create your Google Account') || content.includes('Sorry, we could not create')) {
             console.error('CRITICAL: Google blocked account creation for this session.');
@@ -271,15 +372,16 @@ export async function runResearch(): Promise<void> {
     console.log('Navigating with MAX ULTRA Stealth Mode...');
     await context.clearCookies();
     
-    // Warm-up phase: Visit Google Home first (more natural than direct search)
+    // Add real human-like delay before starting
+    await page.waitForTimeout(2000 + Math.random() * 3000);
     try {
-        console.log('Warm-up Phase 1: Visiting Google Home...');
+        process.stdout.write('Trust Building: Warm-up phase starting... ');
         await page.goto('https://www.google.com', { waitUntil: 'networkidle', timeout: 30000 });
         await page.waitForTimeout(2000);
         
         if (await checkSecurityBlocks()) return;
 
-        console.log('Warm-up Phase 2: Searching naturally...');
+        process.stdout.write('Searching... ');
         const searchInput = page.locator('textarea[name="q"], input[name="q"]').first();
         if (await searchInput.isVisible()) {
             await searchInput.click();
@@ -304,6 +406,9 @@ export async function runResearch(): Promise<void> {
     const targetUrl = signupUrls[Math.floor(Math.random() * signupUrls.length)];
     
     try {
+        await page.waitForTimeout(1000);
+        console.log('Done.');
+        
         console.log(`Navigating to Signup: ${targetUrl}`);
         await page.goto(targetUrl, { 
             waitUntil: 'domcontentloaded', 
@@ -338,7 +443,7 @@ export async function runResearch(): Promise<void> {
         try {
             const btn = page.locator(selector).first();
             if (await btn.isVisible()) {
-                console.log(`Target button found with selector: ${selector}`);
+                console.log('Button found.');
                 
                 // Human-like scroll and hover
                 await btn.scrollIntoViewIfNeeded();
@@ -346,7 +451,6 @@ export async function runResearch(): Promise<void> {
                 
                 const box = await btn.boundingBox();
                 if (box) {
-                    console.log('Simulating Touch tap on button...');
                     // Tap simulation for mobile
                     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 10 });
                     await page.mouse.down();
@@ -359,7 +463,6 @@ export async function runResearch(): Promise<void> {
                     await btn.click({ force: true, noWaitAfter: true });
                 }
 
-                console.log('Action sent, checking for menu...');
                 await page.waitForTimeout(3000);
 
                 // Menu selection with extreme persistence
@@ -374,9 +477,8 @@ export async function runResearch(): Promise<void> {
                 for (const pSelector of personalOptions) {
                     const pBtn = page.locator(pSelector).first();
                     if (await pBtn.isVisible()) {
-                        console.log(`Menu found: ${pSelector}. Clicking...`);
+                        console.log('Selecting "Personal Use"...');
                         await pBtn.click({ force: true });
-                        console.log('Success! Form should open.');
                         return;
                     }
                 }
@@ -395,9 +497,7 @@ export async function runResearch(): Promise<void> {
                 
                 await page.waitForTimeout(2000);
             }
-        } catch (e) {
-            console.log(`Selector ${selector} failed.`);
-        }
+        } catch (e) {}
     }
     
     console.log('Could not automate Create account. Please click it manually to continue.');
