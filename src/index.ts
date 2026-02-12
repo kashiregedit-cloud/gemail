@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { runResearch } from './automation';
+import { runResearch } from './automation.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -30,6 +30,7 @@ app.post('/api/start-signup', async (req: Request, res: Response) => {
     }
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`Dashboard running at http://localhost:${PORT}`);
+    console.log(`To access from mobile, use your PC's IP (e.g., http://192.168.1.x:3000)`);
 });
