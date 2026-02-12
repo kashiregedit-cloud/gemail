@@ -45,7 +45,7 @@ export async function runResearch(): Promise<void> {
     console.log(`Simulating Device: ${selectedDevice.name} [Android ${selectedVersion}, Build ${selectedBuild}]`);
 
     const launchOptions: any = {
-        headless: false,
+        headless: process.env.HEADLESS === 'true' || false,
         args: [
             '--disable-blink-features=AutomationControlled',
             '--no-sandbox',
